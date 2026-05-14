@@ -76,10 +76,11 @@ def build_overlay_rego(base_rego: str, namespace: str) -> str:
     rego = base_rego.replace("system:serviceaccount:osac:", f"system:serviceaccount:{namespace}:")
 
     extra = "\n".join(f'  "system:serviceaccount:{namespace}:{sa}",' for sa in EXTRA_EMERGENCY_SAS)
-    rego = rego.replace(
-        f'"system:serviceaccount:{namespace}:controller",\n}}',
-        f'"system:serviceaccount:{namespace}:controller",\n{extra}\n}}',
-    )
+    pattern = f'"system:serviceaccount:{namespace}:controller",\n}}'
+    if pattern not in rego:
+        print(f"ERROR: injection point not found in base Rego. Base format may have changed.", file=sys.stderr)
+        sys.exit(1)
+    rego = rego.replace(pattern, f'"system:serviceaccount:{namespace}:controller",\n{extra}\n}}')
     return rego
 
 
@@ -100,7 +101,7 @@ def write_overlay_rego(path: Path, new_rego: str) -> None:
 
     for i, line in enumerate(content[start:].split("\n")):
         if line.strip() and (len(line) - len(line.lstrip())) <= 14:
-            end = start + sum(len(l) + 1 for l in content[start:].split("\n")[:i])
+            end = start + sum(len(part) + 1 for part in content[start:].split("\n")[:i])
             break
     else:
         end = len(content)
