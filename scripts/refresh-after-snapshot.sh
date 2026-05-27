@@ -253,6 +253,17 @@ wait_aap_controller() {
         echo "Timed out waiting for AAP gateway API to respond"
         exit 1
     }
+    # Recert restarts the kube-apiserver, breaking the controller-task's
+    # in-cluster connections. The pod looks healthy but its scheduler can't
+    # launch jobs via container groups. Recycle the pod for fresh connections.
+    echo "[6/8] Recycling AAP controller-task pod..."
+    oc delete pod -n "${INSTALLER_NAMESPACE}" -l app.kubernetes.io/name=osac-aap-controller-task
+    oc wait pod -n "${INSTALLER_NAMESPACE}" -l app.kubernetes.io/name=osac-aap-controller-task \
+        --for=condition=Ready --timeout=300s
+    retry_until 120 5 '[[ "$(curl -sk -o /dev/null -w %{http_code} https://'"${AAP_ROUTE_HOST}"'/api/gateway/v1/)" == "200" ]]' || {
+        echo "Timed out waiting for AAP gateway after controller-task restart"
+        exit 1
+    }
     echo "[6/8] AAP controller Running, gateway responding"
 }
 
